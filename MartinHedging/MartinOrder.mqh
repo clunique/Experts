@@ -36,12 +36,21 @@ class CMartinOrder
 {
 public:
    int m_nTimeFrame;
+   
    int m_nMainDirect;
    int m_nSubDirect;
+   
+   string m_strMainDirect;
+   string m_strSubDirect;
+   
    int m_nSymbol1OrderCount;
    int m_nSymbol2OrderCount;
+   double m_dLots2;
+   double m_dLots1;
+   
    string m_symbol1;
    string m_symbol2;
+   
    string m_comment;
    int m_nMagicNum;
    double m_dBaseOpenLots;
@@ -57,6 +66,8 @@ public:
       m_nMainDirect = nDirect;
       m_nSymbol1OrderCount = 0;
       m_nSymbol2OrderCount = 0;
+      m_dLots2 = 0.0;
+      m_dLots1 = 0.0;
       m_symbol1 = symbol1;
       m_symbol2 = symbol2;
       m_nTimeFrame = nTimeFrame;
@@ -67,18 +78,46 @@ public:
       {
          m_comment = "Buy";
          m_nSubDirect = OP_SELL;
+         m_strMainDirect = "Buy";
+         m_strSubDirect = "Sell";
          m_nMagicNum = 10000 + m_nTimeFrame;
       }else
       {
          m_comment = "Sell";
          m_nSubDirect = OP_BUY;
+         m_strMainDirect = "Sell";
+         m_strSubDirect = "Buy";
          m_nMagicNum = 20000 + m_nTimeFrame;
       }
    }
    int LoadAllOrders()
    {
-      m_nSymbol2OrderCount = LoadOrders(m_symbol2, m_orderInfo2, m_nMainDirect, m_comment, m_nMagicNum);
-      m_nSymbol1OrderCount = LoadOrders(m_symbol1, m_orderInfo1, m_nSubDirect, m_comment, m_nMagicNum);
+      string logMsg;
+      m_nSymbol2OrderCount = LoadOrders(m_symbol2, m_nMainDirect, m_comment, m_nMagicNum, 
+                                       m_orderInfo2, m_nSymbol2OrderCount, m_dLots2 );
+      
+      logMsg = StringFormat("%s => MainSymbol = %s, orderType = %d(%s), comment = %s, orderCount = %d, Lots = %s ",
+                               __FUNCTION__, m_symbol2, m_nMainDirect, m_strMainDirect,
+                               m_comment, m_nSymbol2OrderCount, DoubleToString(m_dLots2, 2));
+      LogInfo(logMsg);
+      
+      logMsg = StringFormat("%s => MainSymbol = %s, lastOrderPrice = %s, lastLots = %s ",
+                               __FUNCTION__, m_symbol2, DoubleToString(m_orderInfo2[m_nSymbol2OrderCount - 1].m_Prices, 4), 
+                               DoubleToString(m_orderInfo2[m_nSymbol2OrderCount - 1].m_Lots, 2));
+      LogInfo(logMsg);
+      
+      m_nSymbol1OrderCount = LoadOrders(m_symbol1,  m_nSubDirect, m_comment, m_nMagicNum, 
+                                       m_orderInfo1, m_nSymbol1OrderCount, m_dLots1);
+      logMsg = StringFormat("%s => SubSymbol = %s, orderType = %d(%s), comment = %s, orderCount = %d, Lots = %s ",
+                               __FUNCTION__, m_symbol1, m_nSubDirect, m_strSubDirect,
+                              m_comment, m_nSymbol1OrderCount, DoubleToString(m_dLots1, 2));
+      LogInfo(logMsg);
+      
+      logMsg = StringFormat("%s => SubSymbol = %s, lastOrderPrice = %s, lastLots = %s ",
+                               __FUNCTION__, m_symbol2, DoubleToString(m_orderInfo1[m_nSymbol1OrderCount - 1].m_Prices, 4), 
+                               DoubleToString(m_orderInfo1[m_nSymbol1OrderCount - 1].m_Lots, 2));
+      LogInfo(logMsg);
+      
       return MathMax(m_nSymbol1OrderCount, m_nSymbol2OrderCount);
    }
    
@@ -93,9 +132,35 @@ public:
       return 0;
    }
 private:
-   int LoadOrders(string symbol, COrderInfo & orderInfo[], int nDirect, string comment, int nMagicNum)
+   int LoadOrders(string symbol, int nDirect, string comment, int nMagicNum, 
+                  COrderInfo & orderInfo[], int & count, double & lots)
    {
       int nOrdersCnt = 0;
+      int nOrdersTotalCnt = OrdersTotal();
+      double dLots = 0;
+      for(int i = 0; i < nOrdersTotalCnt; i++)
+      {
+         if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES))
+         {
+            if(OrderSymbol() == symbol 
+               && OrderMagicNumber() == nMagicNum
+               && OrderType() == nDirect)
+            {
+                  orderInfo[nOrdersCnt].m_Symbol = symbol;
+                  orderInfo[nOrdersCnt].m_Ticket = OrderTicket(); 
+                  orderInfo[nOrdersCnt].m_Prices = OrderClosePrice();
+                  orderInfo[nOrdersCnt].m_Lots = OrderLots();
+                  orderInfo[nOrdersCnt].m_Comment = OrderComment();
+                  orderInfo[nOrdersCnt].m_OrderType = nDirect;
+                  orderInfo[nOrdersCnt].m_TradeTime = OrderOpenTime();
+                  nOrdersCnt++; 
+                  dLots +=  OrderLots();
+            }
+         }
+      }
+      
+      count = nOrdersCnt;
+      lots = dLots;
       return nOrdersCnt;
    }
    
